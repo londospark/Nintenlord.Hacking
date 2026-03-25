@@ -10,7 +10,7 @@ namespace Nintenlord.ROMHacking
     {
         public static BinaryTree<T> GetHuffmanTree<T>(IDictionary<T, int> items)
         {
-            LinkedList<KeyValuePair<BinaryTree<T>, int>> trees = 
+            var trees = 
                 new LinkedList<KeyValuePair<BinaryTree<T>, int>>();
             
             foreach (var item in items)
@@ -35,7 +35,7 @@ namespace Nintenlord.ROMHacking
 
                 if (trees.Count > 0)
                 {
-                    LinkedListNode<KeyValuePair<BinaryTree<T>, int>> node = trees.First;
+                    var node = trees.First;
                     while (node.Value.Value > newItem.Value && node.Next != null)
                     {
                         node = node.Next;
@@ -54,7 +54,7 @@ namespace Nintenlord.ROMHacking
 
         public static void DecompressData<T>(byte[] data, int index, int length, BinaryTree<T> tree, ICollection<T> toAddTo)
         {
-            using (BitReader stream = new BitReader(new MemoryStream(data, index, length)))
+            using (var stream = new BitReader(new MemoryStream(data, index, length)))
             {
                 while (stream.BaseStream.Position < stream.BaseStream.Length)
                 {
@@ -65,7 +65,7 @@ namespace Nintenlord.ROMHacking
 
         public static void DecompressDataUntil<T>(byte[] data, int index, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo)
         {
-            using (BitReader stream = new BitReader(new MemoryStream(data, index, data.Length - index)))
+            using (var stream = new BitReader(new MemoryStream(data, index, data.Length - index)))
             {
                 T last;
                 do
@@ -79,7 +79,7 @@ namespace Nintenlord.ROMHacking
 
         public static void DecompressDataUntil<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo)
         {
-            BitReader reader = new BitReader(stream);
+            var reader = new BitReader(stream);
             
             T last;
             do
@@ -92,7 +92,7 @@ namespace Nintenlord.ROMHacking
 
         public static void DecompressDataUntil(Stream stream, Predicate<short> test, BinaryTree<short> tree, BinaryWriter output)
         {
-            BitReader reader = new BitReader(stream);
+            var reader = new BitReader(stream);
 
             short last;
             do
@@ -105,7 +105,7 @@ namespace Nintenlord.ROMHacking
 
         public static void DecompressDataUntil(Stream stream, Predicate<ushort> test, BinaryTree<ushort> tree, BinaryWriter output)
         {
-            BitReader reader = new BitReader(stream);
+            var reader = new BitReader(stream);
 
             ushort last;
             do
@@ -118,9 +118,9 @@ namespace Nintenlord.ROMHacking
 
         public static int GetCompDataLength<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree)
         {
-            long start = stream.Position;
+            var start = stream.Position;
             long length;
-            BitReader reader = new BitReader(stream);
+            var reader = new BitReader(stream);
 
             T last;
             do
@@ -135,7 +135,7 @@ namespace Nintenlord.ROMHacking
 
         private static T Read<T>(BitReader reader, BinaryTree<T> tree)
         {
-            BinaryTreeNode<T> currentNode = tree.Head;
+            var currentNode = tree.Head;
             while (!currentNode.IsLeaf)
             {
                 if (reader.ReadBit())
@@ -176,7 +176,7 @@ namespace Nintenlord.ROMHacking
         /// <returns></returns>
         public static bool IsOptimal<T>(IDictionary<T, bool[]> encoding, IDictionary<T, int> items, IEqualityComparer<T> comp)
         {
-            List<T> sortedItems = new List<T>(items.Keys);
+            var sortedItems = new List<T>(items.Keys);
             sortedItems.Sort((x, y) => items[x] - items[y]);
 
             if (encoding[sortedItems[sortedItems.Count - 1]].Length !=
@@ -186,8 +186,8 @@ namespace Nintenlord.ROMHacking
                 return false;
             }
 
-            int lastItem = items[sortedItems[0]];
-            for (int i = 1; i < sortedItems.Count; i++)
+            var lastItem = items[sortedItems[0]];
+            for (var i = 1; i < sortedItems.Count; i++)
             {                
                 //(items[x] > items[y]) -> (encoding[x].Length <= encoding[y].Length)
 

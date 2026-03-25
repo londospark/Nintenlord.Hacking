@@ -71,8 +71,8 @@ namespace Nintenlord.Hacking.Core
 
         public static uint CalculateCRC32(byte[] data, int index, int length)
         {
-            uint crc32 = 0xFFFFFFFF;
-            for (int i = index; i < index + length; i++)
+            var crc32 = 0xFFFFFFFF;
+            for (var i = index; i < index + length; i++)
             {
                 crc32_adjust(ref crc32, data[i]);
             }
@@ -81,7 +81,7 @@ namespace Nintenlord.Hacking.Core
 
         public static uint CalculateCRC32(BinaryReader reader)
         {
-            uint crc32 = 0xFFFFFFFF;
+            var crc32 = 0xFFFFFFFF;
             while (reader.BaseStream.Position < reader.BaseStream.Length)
             {
                 crc32_adjust(ref crc32, reader.ReadByte());

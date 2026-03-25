@@ -73,7 +73,7 @@ namespace Nintenlord.Hacking.Core
         }
         public void InsertData(int offset, byte value)
         {
-            InsertData(offset, BitConverter.GetBytes(value));
+            InsertData(offset, BitConverter.GetBytes((short)value));
         }
         public void InsertData(int offset, byte[] data)
         {
@@ -104,7 +104,7 @@ namespace Nintenlord.Hacking.Core
             }
             else
             {
-                byte[] temp = new byte[length];
+                var temp = new byte[length];
                 Array.Copy(ROMdata, odlOffset, temp, 0, length);
                 Array.Copy(temp, 0, ROMdata, newOffset, length);
             }
@@ -121,7 +121,7 @@ namespace Nintenlord.Hacking.Core
         {
             if (length == 0 || offset + length > ROMdata.Length)
                 length = ROMdata.Length - offset;
-            byte[] data = new byte[length];
+            var data = new byte[length];
             Array.Copy(ROMdata, offset, data, 0, length);
             return data;
         }
@@ -148,12 +148,12 @@ namespace Nintenlord.Hacking.Core
         }
         public int[] SearchForValue(byte[] value, int offset, int area)
         {
-            List<int> offsets = new List<int>();
-            int index = offset;
-            int maxIndex = area + offset;
+            var offsets = new List<int>();
+            var index = offset;
+            var maxIndex = area + offset;
             while (index < maxIndex)
             {
-                int foundIndex = 0;
+                var foundIndex = 0;
                 while (index + foundIndex < ROMdata.Length
                     && foundIndex < value.Length
                     && ROMdata[index + foundIndex] == value[foundIndex])
@@ -218,7 +218,7 @@ namespace Nintenlord.Hacking.Core
 
             public override int Read(byte[] buffer, int offset, int count)
             {
-                long amountToCopy = Math.Min(ROM.Length - position, count);
+                var amountToCopy = Math.Min(ROM.Length - position, count);
                 Array.Copy(ROM.ROMdata, position, buffer, offset, amountToCopy);
 
                 return (int)amountToCopy;

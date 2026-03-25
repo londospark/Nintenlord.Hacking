@@ -113,7 +113,7 @@ namespace Nintenlord.Hacking.Core
 
         public T GetAppData<T>(string appName)
         {
-            object obj = appData[appName];
+            var obj = appData[appName];
             if (obj is T)
             {
                 return (T)obj;
@@ -151,12 +151,12 @@ namespace Nintenlord.Hacking.Core
         /// <returns>Offset of free data or -1 if no free space öarge enough was found.</returns>
         public int GetFreeData(int size)
         {
-            KeyValuePair<int, int>[] array = freeSpace.ToArray<KeyValuePair<int, int>>();
+            var array = freeSpace.ToArray<KeyValuePair<int, int>>();
             if (array.Length == 0)
                 return -1;
-            List<KeyValuePair<int, int>> values = new List<KeyValuePair<int, int>>();
+            var values = new List<KeyValuePair<int, int>>();
 
-            for (int i = 0; i < array.Length; i++)
+            for (var i = 0; i < array.Length; i++)
             {
                 if (array[i].Value >= size)
                 {

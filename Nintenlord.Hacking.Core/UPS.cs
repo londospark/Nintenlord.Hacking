@@ -27,8 +27,8 @@ namespace Nintenlord.Hacking.Core
         /// <param name="filePath">A path to an existing, valid UPS path.</param>
         public UPSfile(string filePath)
         {
-            List<ulong> changedOffsetsList = new List<ulong>();
-            List<byte[]> XORbytesList = new List<byte[]>();
+            var changedOffsetsList = new List<ulong>();
+            var XORbytesList = new List<byte[]>();
 
             validPatch = false;
 
@@ -38,7 +38,7 @@ namespace Nintenlord.Hacking.Core
             byte[] UPSfile;
             try
             {
-                BinaryReader br = new BinaryReader(File.OpenRead(filePath));
+                var br = new BinaryReader(File.OpenRead(filePath));
                 UPSfile = br.ReadBytes((int)br.BaseStream.Length);
                 br.Close();
             }
@@ -50,8 +50,8 @@ namespace Nintenlord.Hacking.Core
             fixed (byte* UPSptr = &UPSfile[0])
             {
                 //header
-                byte* currentPtr = UPSptr;
-                string header = new string((sbyte*)currentPtr, 0, 4, Encoding.ASCII);
+                var currentPtr = UPSptr;
+                var header = new string((sbyte*)currentPtr, 0, 4, Encoding.ASCII);
                 if (header != "UPS1")
                     return;
                 currentPtr += 4;
@@ -64,7 +64,7 @@ namespace Nintenlord.Hacking.Core
                 {
                     filePosition += Decrypt(&currentPtr);
                     changedOffsetsList.Add(filePosition);
-                    List<byte> newXORdata = new List<byte>();
+                    var newXORdata = new List<byte>();
 
                     while (*currentPtr != 0)
                     {
@@ -93,8 +93,8 @@ namespace Nintenlord.Hacking.Core
 
         public UPSfile(byte[] originalFile, byte[] newFile)
         {
-            List<ulong> changedOffsetsList = new List<ulong>();
-            List<byte[]> XORbytesList = new List<byte[]>();
+            var changedOffsetsList = new List<ulong>();
+            var XORbytesList = new List<byte[]>();
             validPatch = true;
             oldFileSize = (ulong)originalFile.Length;
             newFileSize = (ulong)newFile.Length;
@@ -107,13 +107,13 @@ namespace Nintenlord.Hacking.Core
 
             for (ulong i = 0; i < maxSize; i++)
             {
-                byte x = i < oldFileSize ? originalFile[i] : (byte)0x00;
-                byte y = i < newFileSize ? newFile[i] : (byte)0x00;
+                var x = i < oldFileSize ? originalFile[i] : (byte)0x00;
+                var y = i < newFileSize ? newFile[i] : (byte)0x00;
 
                 if (x != y)
                 {
                     changedOffsetsList.Add(i);
-                    List<byte> newXORbytes = new List<byte>();
+                    var newXORbytes = new List<byte>();
                     while (x != y && i < maxSize)
                     {
                         newXORbytes.Add((byte)(x ^ y));
@@ -135,7 +135,7 @@ namespace Nintenlord.Hacking.Core
         {
             this.changedOffsets = changedOffsets.Clone() as ulong[];
             this.XORbytes = new byte[XORbytes.Length][];
-            for (int i = 0; i < this.XORbytes.Length; i++)
+            for (var i = 0; i < this.XORbytes.Length; i++)
             {
                 this.XORbytes[i] = XORbytes[i].Clone() as byte[];
             }
@@ -148,9 +148,9 @@ namespace Nintenlord.Hacking.Core
 
         static byte[] Encrypt(ulong offset)
         {
-            List<byte> bytes = new List<byte>(8);
+            var bytes = new List<byte>(8);
 
-            ulong x = offset & 0x7f;
+            var x = offset & 0x7f;
             offset >>= 7;
             while (offset != 0)
             {
@@ -166,8 +166,8 @@ namespace Nintenlord.Hacking.Core
         static ulong Decrypt(byte** pointer)
         {
             ulong value = 0;
-            int shift = 1;
-            byte x = *(*pointer)++;
+            var shift = 1;
+            var x = *(*pointer)++;
             value += (ulong)((x & 0x7F) * shift);
             while ((x & 0x80) == 0)
             {
@@ -186,26 +186,26 @@ namespace Nintenlord.Hacking.Core
 
         public bool ValidToApply(byte[] file)
         {
-            uint fileCRC32 = CRC32.CalculateCRC32(file);
-            bool fitsAsOld = oldFileSize == (ulong)file.Length && fileCRC32 == originalFileCRC32;
-            bool fitsAsNew = newFileSize == (ulong)file.Length && fileCRC32 == newFileCRC32;
+            var fileCRC32 = CRC32.CalculateCRC32(file);
+            var fitsAsOld = oldFileSize == (ulong)file.Length && fileCRC32 == originalFileCRC32;
+            var fitsAsNew = newFileSize == (ulong)file.Length && fileCRC32 == newFileCRC32;
 
             return validPatch && (fitsAsOld || fitsAsNew);
         }
 
         public byte[] Apply(byte[] file)
         {
-            ulong lenght = (ulong)file.LongLength;
+            var lenght = (ulong)file.LongLength;
             if (lenght < newFileSize)
                 lenght = newFileSize;
 
-            byte[] result = new byte[lenght];
+            var result = new byte[lenght];
 
             fixed (byte* resultPtr = &result[0])
             {
                 Marshal.Copy(file, 0, new IntPtr(resultPtr), Math.Min(file.Length, result.Length));
 
-                for (int i = 0; i < changedOffsets.LongLength; i++)
+                for (var i = 0; i < changedOffsets.LongLength; i++)
                     for (ulong u = 0; u < (ulong)XORbytes[i].LongLength; u++)
                         resultPtr[changedOffsets[i] + u] ^= XORbytes[i][u];
             }
@@ -217,15 +217,15 @@ namespace Nintenlord.Hacking.Core
             if (!validPatch || !File.Exists(path))
                 return null;
 
-            BinaryReader br = new BinaryReader(File.Open(path, FileMode.Open));
-            byte[] file = br.ReadBytes((int)br.BaseStream.Length);
+            var br = new BinaryReader(File.Open(path, FileMode.Open));
+            var file = br.ReadBytes((int)br.BaseStream.Length);
             br.Close();
             return Apply(file);
         }
 
         private byte[] ToBinary()
         {
-            List<byte> file = new List<byte>();
+            var file = new List<byte>();
             file.Add((byte)'U');
             file.Add((byte)'P');
             file.Add((byte)'S');
@@ -233,9 +233,9 @@ namespace Nintenlord.Hacking.Core
             file.AddRange(Encrypt(oldFileSize));
             file.AddRange(Encrypt(newFileSize));
 
-            for (int i = 0; i < changedOffsets.LongLength; i++)
+            for (var i = 0; i < changedOffsets.LongLength; i++)
             {
-                ulong relativeOffset = changedOffsets[i];
+                var relativeOffset = changedOffsets[i];
                 if (i != 0)
                     relativeOffset -= changedOffsets[i - 1] + (ulong)XORbytes[i - 1].Length + 1;
 
@@ -252,8 +252,8 @@ namespace Nintenlord.Hacking.Core
 
         public void WriteToFile(string path)
         {
-            BinaryWriter bw = new BinaryWriter(File.Open(path, FileMode.Create));
-            byte[] file = ToBinary();
+            var bw = new BinaryWriter(File.Open(path, FileMode.Create));
+            var file = ToBinary();
             bw.Write(file);
             bw.Write(CRC32.CalculateCRC32(file));
             bw.Close();
@@ -261,8 +261,8 @@ namespace Nintenlord.Hacking.Core
 
         public int[,] GetData()
         {
-            int[,] result = new int[changedOffsets.Length, 2];
-            for (int i = 0; i < changedOffsets.Length; i++)
+            var result = new int[changedOffsets.Length, 2];
+            for (var i = 0; i < changedOffsets.Length; i++)
             {
                 result[i, 0] = (int)changedOffsets[i];
                 result[i, 1] = XORbytes[i].Length;
@@ -272,7 +272,7 @@ namespace Nintenlord.Hacking.Core
 
         public bool ChangesOffset(ulong offset)
         {
-            for (int i = 0; changedOffsets[i] <= offset && i < changedOffsets.Length; i++)
+            for (var i = 0; changedOffsets[i] <= offset && i < changedOffsets.Length; i++)
             {
                 if (changedOffsets[i] <= offset && offset < changedOffsets[i] + (ulong)XORbytes[i].Length)
                     return true;
@@ -282,7 +282,7 @@ namespace Nintenlord.Hacking.Core
 
         public bool ChangeOffsets(ulong offset, int length)
         {
-            for (int i = 0; changedOffsets[i] <= offset + (ulong)length && i < changedOffsets.Length; i++)
+            for (var i = 0; changedOffsets[i] <= offset + (ulong)length && i < changedOffsets.Length; i++)
             {
                 if (changedOffsets[i] <= offset && changedOffsets[i] + (ulong)XORbytes[i].LongLength > offset)
                     return true;
@@ -294,11 +294,11 @@ namespace Nintenlord.Hacking.Core
 
         public static UPSfile operator +(UPSfile a, UPSfile b)
         {
-            byte[] emptyFile = new byte[Math.Max(a.newFileSize, b.newFileSize)];
-            byte[] OrigEmptyFile = emptyFile.Clone() as byte[];
+            var emptyFile = new byte[Math.Max(a.newFileSize, b.newFileSize)];
+            var OrigEmptyFile = emptyFile.Clone() as byte[];
             emptyFile = b.Apply(a.Apply(emptyFile));
 
-            UPSfile result = new UPSfile(OrigEmptyFile, emptyFile);
+            var result = new UPSfile(OrigEmptyFile, emptyFile);
             result.patchCRC32 = result.CalculatePatchCRC32();
             result.originalFileCRC32 = a.originalFileCRC32;
             result.newFileCRC32 = 0;
