@@ -10,8 +10,8 @@ namespace Nintenlord.Hacking.Core
     {
         private bool edited;
         private readonly int maxLength;
-        private string path;
-        protected byte[] ROMdata;
+        private string? path;
+        protected byte[]? ROMdata;
 
         public bool Edited
         {
@@ -31,7 +31,7 @@ namespace Nintenlord.Hacking.Core
         }
         public bool Opened => ROMdata != null && path != null;
 
-        public string ROMPath
+        public string? ROMPath
         {
             get => path;
             protected set => path = value;
@@ -46,7 +46,7 @@ namespace Nintenlord.Hacking.Core
         public abstract void OpenROM(string path);
         public abstract void OpenROM(Stream stream);
         public abstract void CloseROM();
-        public void SaveROM() => SaveROM(path);
+        public void SaveROM() => SaveROM(path!);
         public abstract void SaveROM(string path);
         public abstract void SaveROM(Stream stream);
         public abstract void SaveBackup();
@@ -68,25 +68,25 @@ namespace Nintenlord.Hacking.Core
             edited = true;
             if (length == 0 || index + length > data.Length)
                 length = data.Length - index;
-            if (offset + length > ROMdata.Length)
+            if (offset + length > ROMdata!.Length)
             {
                 ChangeROMSize(offset + length);
-                length = ROMdata.Length - offset;
+                length = ROMdata!.Length - offset;
             }
-            Array.Copy(data, index, ROMdata, offset, length);
+            Array.Copy(data, index, ROMdata!, offset, length);
         }
 
         public void Move(int odlOffset, int newOffset, int length)
         {
             if (Math.Abs(odlOffset - newOffset) > length)
             {
-                Array.Copy(ROMdata, odlOffset, ROMdata, newOffset, length);
+                Array.Copy(ROMdata!, odlOffset, ROMdata!, newOffset, length);
             }
             else
             {
                 var temp = new byte[length];
-                Array.Copy(ROMdata, odlOffset, temp, 0, length);
-                Array.Copy(temp, 0, ROMdata, newOffset, length);
+                Array.Copy(ROMdata!, odlOffset, temp, 0, length);
+                Array.Copy(temp, 0, ROMdata!, newOffset, length);
             }
         }
 
@@ -99,10 +99,10 @@ namespace Nintenlord.Hacking.Core
 
         public byte[] GetData(int offset, int length)
         {
-            if (length == 0 || offset + length > ROMdata.Length)
-                length = ROMdata.Length - offset;
+            if (length == 0 || offset + length > ROMdata!.Length)
+                length = ROMdata!.Length - offset;
             var data = new byte[length];
-            Array.Copy(ROMdata, offset, data, 0, length);
+            Array.Copy(ROMdata!, offset, data, 0, length);
             return data;
         }
 
@@ -114,7 +114,7 @@ namespace Nintenlord.Hacking.Core
 
         public int[] SearchForValue(short value, int offset, int area) => SearchForValue(BitConverter.GetBytes(value), offset, area);
 
-        public int[] SearchForValue(byte[] value) => SearchForValue(value, 0, ROMdata.Length - value.Length);
+        public int[] SearchForValue(byte[] value) => SearchForValue(value, 0, ROMdata!.Length - value.Length);
 
         public int[] SearchForValue(byte[] value, int offset, int area)
         {
@@ -124,9 +124,9 @@ namespace Nintenlord.Hacking.Core
             while (index < maxIndex)
             {
                 var foundIndex = 0;
-                while (index + foundIndex < ROMdata.Length
+                while (index + foundIndex < ROMdata!.Length
                     && foundIndex < value.Length
-                    && ROMdata[index + foundIndex] == value[foundIndex])
+                    && ROMdata![index + foundIndex] == value[foundIndex])
                 {
                     foundIndex++;
                 }
@@ -140,7 +140,7 @@ namespace Nintenlord.Hacking.Core
 
         private class ROMStream : Stream
         {
-            private AbstractROM ROM;
+            private AbstractROM? ROM;
             private long position;
 
             public ROMStream(AbstractROM ROM)
@@ -160,7 +160,7 @@ namespace Nintenlord.Hacking.Core
 
             }
 
-            public override long Length => ROM.Length;
+            public override long Length => ROM!.Length;
 
             public override long Position
             {
@@ -170,8 +170,8 @@ namespace Nintenlord.Hacking.Core
 
             public override int Read(byte[] buffer, int offset, int count)
             {
-                var amountToCopy = Math.Min(ROM.Length - position, count);
-                Array.Copy(ROM.ROMdata, position, buffer, offset, amountToCopy);
+                var amountToCopy = Math.Min(ROM!.Length - position, count);
+                Array.Copy(ROM!.ROMdata!, position, buffer, offset, amountToCopy);
 
                 return (int)amountToCopy;
             }
@@ -187,7 +187,7 @@ namespace Nintenlord.Hacking.Core
                         position += offset;
                         break;
                     case SeekOrigin.End:
-                        position = ROM.Length - offset;
+                        position = ROM!.Length - offset;
                         break;
                     default:
                         break;
@@ -195,11 +195,11 @@ namespace Nintenlord.Hacking.Core
                 return offset;
             }
 
-            public override void SetLength(long value) => ROM.ChangeROMSize((int)value);
+            public override void SetLength(long value) => ROM!.ChangeROMSize((int)value);
 
             public override void Write(byte[] buffer, int offset, int count)
             {
-                ROM.InsertData((int)position, buffer, offset, count);
+                ROM!.InsertData((int)position, buffer, offset, count);
                 position += count;
             }
 
@@ -211,7 +211,7 @@ namespace Nintenlord.Hacking.Core
             }
         }
 
-        public Stream GetStream() => new MemoryStream(ROMdata);
+        public Stream GetStream() => new MemoryStream(ROMdata!);
         //return new ROMStream(this);
     }
 }

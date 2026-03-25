@@ -91,7 +91,7 @@ namespace Nintenlord.Hacking.Core
 
         #region File data
 
-        public void AddAppData<T>(string appName, T data)
+        public void AddAppData<T>(string appName, T data) where T : notnull
         {
             if (!data.GetType().IsSerializable)
             {

@@ -8,7 +8,7 @@ namespace Nintenlord.ROMHacking
 {
     public static class Huffman
     {
-        public static BinaryTree<T> GetHuffmanTree<T>(IDictionary<T, int> items)
+        public static BinaryTree<T> GetHuffmanTree<T>(IDictionary<T, int> items) where T : notnull
         {
             var trees =
                 new LinkedList<KeyValuePair<BinaryTree<T>, int>>();
@@ -23,9 +23,9 @@ namespace Nintenlord.ROMHacking
 
             while (trees.Count > 1)
             {
-                var last = trees.Last.Value;
+                var last = trees.Last!.Value;
                 trees.RemoveLast();
-                var notLast = trees.Last.Value;
+                var notLast = trees.Last!.Value;
                 trees.RemoveLast();
 
                 var newItem = new KeyValuePair<BinaryTree<T>, int>(
@@ -35,7 +35,7 @@ namespace Nintenlord.ROMHacking
 
                 if (trees.Count > 0)
                 {
-                    var node = trees.First;
+                    var node = trees.First!;
                     while (node.Value.Value > newItem.Value && node.Next != null)
                     {
                         node = node.Next;
@@ -49,10 +49,10 @@ namespace Nintenlord.ROMHacking
                 }
             }
 
-            return trees.First.Value.Key;
+            return trees.First!.Value.Key;
         }
 
-        public static void DecompressData<T>(byte[] data, int index, int length, BinaryTree<T> tree, ICollection<T> toAddTo)
+        public static void DecompressData<T>(byte[] data, int index, int length, BinaryTree<T> tree, ICollection<T> toAddTo) where T : notnull
         {
             using (var stream = new BitReader(new MemoryStream(data, index, length)))
             {
@@ -63,7 +63,7 @@ namespace Nintenlord.ROMHacking
             }
         }
 
-        public static void DecompressDataUntil<T>(byte[] data, int index, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo)
+        public static void DecompressDataUntil<T>(byte[] data, int index, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo) where T : notnull
         {
             using (var stream = new BitReader(new MemoryStream(data, index, data.Length - index)))
             {
@@ -77,7 +77,7 @@ namespace Nintenlord.ROMHacking
             }
         }
 
-        public static void DecompressDataUntil<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo)
+        public static void DecompressDataUntil<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo) where T : notnull
         {
             var reader = new BitReader(stream);
 
@@ -116,7 +116,7 @@ namespace Nintenlord.ROMHacking
             while (!test(last));
         }
 
-        public static int GetCompDataLength<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree)
+        public static int GetCompDataLength<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree) where T : notnull
         {
             var start = stream.Position;
             long length;
@@ -133,7 +133,7 @@ namespace Nintenlord.ROMHacking
             return (int)length;
         }
 
-        private static T Read<T>(BitReader reader, BinaryTree<T> tree)
+        private static T Read<T>(BitReader reader, BinaryTree<T> tree) where T : notnull
         {
             var currentNode = tree.Head;
             while (!currentNode.IsLeaf)

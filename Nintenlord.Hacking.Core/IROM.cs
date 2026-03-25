@@ -16,7 +16,7 @@ namespace Nintenlord.ROMHacking
         {
             get;
         }
-        string ROMPath
+        string? ROMPath
         {
             get;
         }

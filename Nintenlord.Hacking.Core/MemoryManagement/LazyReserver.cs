@@ -9,7 +9,7 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
     {
         private readonly int offset;
         private readonly int size;
-        private ManagedPointer dataPointer;
+        private ManagedPointer? dataPointer;
         private readonly IROM rom;
         private readonly IMemoryManager man;
 
@@ -18,7 +18,7 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
         {
             get
             {
-                if (dataPointer != null)
+                if (dataPointer == null)
                 {
                     return offset;
                 }
@@ -57,7 +57,7 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
 
         public byte[] ReadData()
         {
-            if (dataPointer != null)
+            if (dataPointer == null)
             {
                 return rom.ReadData(offset, size);
             }

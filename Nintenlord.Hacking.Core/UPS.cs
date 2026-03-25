@@ -15,8 +15,8 @@ namespace Nintenlord.Hacking.Core
         private uint patchCRC32;
         private readonly ulong oldFileSize;
         private readonly ulong newFileSize;
-        private readonly ulong[] changedOffsets;
-        private readonly byte[][] XORbytes;
+        private readonly ulong[] changedOffsets = Array.Empty<ulong>();
+        private readonly byte[][] XORbytes = Array.Empty<byte[]>();
 
         /// <summary>
         /// Creates a new UPS patch from UPS file
@@ -130,11 +130,11 @@ namespace Nintenlord.Hacking.Core
 
         private UPSfile(ulong[] changedOffsets, byte[][] XORbytes, uint originalFileCRC32, uint newFileCRC32, ulong oldFileSize, ulong newFileSize)
         {
-            this.changedOffsets = changedOffsets.Clone() as ulong[];
+            this.changedOffsets = (ulong[])changedOffsets.Clone();
             this.XORbytes = new byte[XORbytes.Length][];
             for (var i = 0; i < this.XORbytes.Length; i++)
             {
-                this.XORbytes[i] = XORbytes[i].Clone() as byte[];
+                this.XORbytes[i] = (byte[])XORbytes[i].Clone();
             }
             this.originalFileCRC32 = originalFileCRC32;
             this.newFileCRC32 = newFileCRC32;
@@ -206,7 +206,7 @@ namespace Nintenlord.Hacking.Core
             return result;
         }
 
-        public byte[] Apply(string path)
+        public byte[]? Apply(string path)
         {
             if (!validPatch || !File.Exists(path))
                 return null;
@@ -289,7 +289,7 @@ namespace Nintenlord.Hacking.Core
         public static UPSfile operator +(UPSfile a, UPSfile b)
         {
             var emptyFile = new byte[Math.Max(a.newFileSize, b.newFileSize)];
-            var OrigEmptyFile = emptyFile.Clone() as byte[];
+            var OrigEmptyFile = (byte[])emptyFile.Clone();
             emptyFile = b.Apply(a.Apply(emptyFile));
 
             var result = new UPSfile(OrigEmptyFile, emptyFile);

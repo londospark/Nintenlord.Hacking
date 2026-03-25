@@ -59,19 +59,24 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
 
         #region IComparable<ManagedPointer> Members
 
-        public int CompareTo(ManagedPointer other) => offset - other.offset;
+        public int CompareTo(ManagedPointer? other)
+        {
+            if (other is null) return 1;
+            return offset - other.offset;
+        }
 
         #endregion
 
         #region IEquatable<ManagedPointer> Members
 
-        public bool Equals(ManagedPointer other) =>
+        public bool Equals(ManagedPointer? other) =>
+            other is not null &&
             size == other.size &&
             offset == other.offset;
 
         #endregion
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj is ManagedPointer)
             {

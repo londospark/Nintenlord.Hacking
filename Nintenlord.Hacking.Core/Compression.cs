@@ -60,7 +60,7 @@ namespace Nintenlord.Hacking.Core
 
         public bool SupportsOperation(CompressionOperation operation) => (supportedModes & operation) == operation;
 
-        public override bool Equals(object obj) => GetType() == obj.GetType();
+        public override bool Equals(object? obj) => obj != null && GetType() == obj.GetType();
 
         public override int GetHashCode() => GetType().GetHashCode();
 
