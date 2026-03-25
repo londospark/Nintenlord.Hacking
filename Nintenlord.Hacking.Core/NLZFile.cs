@@ -17,11 +17,11 @@ namespace Nintenlord.Hacking.Core
     [Serializable]
     public class NLZFile : IXmlSerializable, ISerializable
     {
-        int crc32;
-        int fileSize;
-        IDataChange<byte> identificationData;
-        IIndexOverlay freeSpace;
-        Dictionary<string, object> appData;
+        private int crc32;
+        private int fileSize;
+        private IDataChange<byte> identificationData;
+        private IIndexOverlay freeSpace;
+        private Dictionary<string, object> appData;
 
         private const string crc32Name = "CRC32";
         private const string fileSizeName = "File size";
@@ -34,8 +34,8 @@ namespace Nintenlord.Hacking.Core
         /// </summary>
         public int CRC32
         {
-            get { return crc32; }
-            set { crc32 = value; }
+            get => crc32;
+            set => crc32 = value;
         }
 
         /// <summary>
@@ -43,8 +43,8 @@ namespace Nintenlord.Hacking.Core
         /// </summary>
         public int FileSize
         {
-            get { return fileSize; }
-            set { fileSize = value; }
+            get => fileSize;
+            set => fileSize = value;
         }
 
         /// <summary>
@@ -101,15 +101,9 @@ namespace Nintenlord.Hacking.Core
             appData[appName] = data;
         }
 
-        public bool ContainsAppData(string appName)
-        {
-            return appData.ContainsKey(appName);
-        }
+        public bool ContainsAppData(string appName) => appData.ContainsKey(appName);
 
-        public bool RemoveAppData(string appName)
-        {
-            return appData.Remove(appName);
-        }
+        public bool RemoveAppData(string appName) => appData.Remove(appName);
 
         public T GetAppData<T>(string appName)
         {
@@ -127,20 +121,11 @@ namespace Nintenlord.Hacking.Core
         }
 
 
-        public void AddFreeSpace(int offset, int amount)
-        {
-            freeSpace.AddIndexes(offset, amount);
-        }
+        public void AddFreeSpace(int offset, int amount) => freeSpace.AddIndexes(offset, amount);
 
-        public void RemoveFreeSpace(int offset, int amount)
-        {
-            freeSpace.RemoveIndexes(offset, amount);
-        }
+        public void RemoveFreeSpace(int offset, int amount) => freeSpace.RemoveIndexes(offset, amount);
 
-        public bool IsSpaceFree(int offset, int amount)
-        {
-            return freeSpace.ContainsAllIndexes(offset, amount);
-        }
+        public bool IsSpaceFree(int offset, int amount) => freeSpace.ContainsAllIndexes(offset, amount);
 
         #endregion
 
@@ -191,20 +176,11 @@ namespace Nintenlord.Hacking.Core
 
         #region IXmlSerializable Members
 
-        public XmlSchema GetSchema()
-        {
-            throw new NotImplementedException();
-        }
+        public XmlSchema GetSchema() => throw new NotImplementedException();
 
-        public void ReadXml(XmlReader reader)
-        {
-            throw new NotImplementedException();
-        }
+        public void ReadXml(XmlReader reader) => throw new NotImplementedException();
 
-        public void WriteXml(XmlWriter writer)
-        {
-            throw new NotImplementedException();
-        }
+        public void WriteXml(XmlWriter writer) => throw new NotImplementedException();
 
         #endregion
     }

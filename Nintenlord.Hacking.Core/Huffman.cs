@@ -10,9 +10,9 @@ namespace Nintenlord.ROMHacking
     {
         public static BinaryTree<T> GetHuffmanTree<T>(IDictionary<T, int> items)
         {
-            var trees = 
+            var trees =
                 new LinkedList<KeyValuePair<BinaryTree<T>, int>>();
-            
+
             foreach (var item in items)
             {
                 trees.AddLast(new KeyValuePair<BinaryTree<T>, int>(
@@ -80,14 +80,14 @@ namespace Nintenlord.ROMHacking
         public static void DecompressDataUntil<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree, ICollection<T> toAddTo)
         {
             var reader = new BitReader(stream);
-            
+
             T last;
             do
             {
                 last = Read(reader, tree);
                 toAddTo.Add(last);
             }
-            while (!test(last));            
+            while (!test(last));
         }
 
         public static void DecompressDataUntil(Stream stream, Predicate<short> test, BinaryTree<short> tree, BinaryWriter output)
@@ -100,7 +100,7 @@ namespace Nintenlord.ROMHacking
                 last = Read(reader, tree);
                 output.Write(last);
             }
-            while (!test(last));            
+            while (!test(last));
         }
 
         public static void DecompressDataUntil(Stream stream, Predicate<ushort> test, BinaryTree<ushort> tree, BinaryWriter output)
@@ -113,7 +113,7 @@ namespace Nintenlord.ROMHacking
                 last = Read(reader, tree);
                 output.Write(last);
             }
-            while (!test(last));            
+            while (!test(last));
         }
 
         public static int GetCompDataLength<T>(Stream stream, Predicate<T> test, BinaryTree<T> tree)
@@ -161,10 +161,7 @@ namespace Nintenlord.ROMHacking
             }
         }
 
-        public static bool IsOptimal<T>(IDictionary<T, bool[]> encoding, IDictionary<T, int> items)
-        {
-            return IsOptimal(encoding, items, EqualityComparer<T>.Default);
-        }
+        public static bool IsOptimal<T>(IDictionary<T, bool[]> encoding, IDictionary<T, int> items) => IsOptimal(encoding, items, EqualityComparer<T>.Default);
 
         /// <summary>
         /// Can return false positives.
@@ -188,11 +185,11 @@ namespace Nintenlord.ROMHacking
 
             var lastItem = items[sortedItems[0]];
             for (var i = 1; i < sortedItems.Count; i++)
-            {                
+            {
                 //(items[x] > items[y]) -> (encoding[x].Length <= encoding[y].Length)
 
                 if (lastItem != items[sortedItems[i]] &&//Meaning items[x] > items[y]
-                    encoding[sortedItems[i-1]].Length > encoding[sortedItems[i]].Length)
+                    encoding[sortedItems[i - 1]].Length > encoding[sortedItems[i]].Length)
                 {
                     return false;
                 }

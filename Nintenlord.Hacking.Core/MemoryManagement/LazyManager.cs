@@ -4,10 +4,7 @@
     {
         #region IMemoryManager Members
 
-        public ManagedPointer Reserve(int offset, int size)
-        {
-            return new ManagedPointer(offset, size, true);
-        }
+        public ManagedPointer Reserve(int offset, int size) => new(offset, size, true);
 
         public void Pin(ManagedPointer ptr)
         {
@@ -23,25 +20,16 @@
 
         #region IAllocator<ManagedPointer> Members
 
-        public ManagedPointer Allocate(int size)
-        {
-            return ManagedPointer.NullPointer;
-        }
+        public ManagedPointer Allocate(int size) => ManagedPointer.NullPointer;
 
-        public ManagedPointer Allocate(int size, int padding)
-        {
-            return ManagedPointer.NullPointer;
-        }
+        public ManagedPointer Allocate(int size, int padding) => ManagedPointer.NullPointer;
 
         public void Deallocate(ManagedPointer pointer)
         {
 
         }
 
-        public bool IsAllocated(ManagedPointer pointer)
-        {
-            return false;
-        }
+        public bool IsAllocated(ManagedPointer pointer) => false;
 
         #endregion
     }

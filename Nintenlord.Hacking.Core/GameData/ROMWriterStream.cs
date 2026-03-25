@@ -6,10 +6,10 @@ namespace Nintenlord.Hacking.Core.GameData
 {
     public sealed class ROMWriterStream : Stream
     {
-        IROM rom;
-        ManagedPointer areaToWriteTo;
-        long offset;
-        byte[] buffer;
+        private readonly IROM rom;
+        private readonly ManagedPointer areaToWriteTo;
+        private long offset;
+        private readonly byte[] buffer;
 
         public ROMWriterStream(IROM rom, ManagedPointer areaToWriteTo)
         {
@@ -19,47 +19,23 @@ namespace Nintenlord.Hacking.Core.GameData
             buffer = rom.ReadData(areaToWriteTo);
         }
 
-        public override bool CanRead
-        {
-            get { return false; }
-        }
+        public override bool CanRead => false;
 
-        public override bool CanSeek
-        {
-            get { return true; }
-        }
+        public override bool CanSeek => true;
 
-        public override bool CanWrite
-        {
-            get { return true; }
-        }
+        public override bool CanWrite => true;
 
-        public override void Flush()
-        {
-            rom.WriteData(areaToWriteTo, buffer, 0, buffer.Length);
-        }
+        public override void Flush() => rom.WriteData(areaToWriteTo, buffer, 0, buffer.Length);
 
-        public override long Length
-        {
-            get { return rom.Length; }
-        }
+        public override long Length => rom.Length;
 
         public override long Position
         {
-            get
-            {
-                return offset;
-            }
-            set
-            {
-                Seek(value, SeekOrigin.Begin);
-            }
+            get => offset;
+            set => Seek(value, SeekOrigin.Begin);
         }
 
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
-        }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         public override long Seek(long offset, SeekOrigin origin)
         {
@@ -86,10 +62,7 @@ namespace Nintenlord.Hacking.Core.GameData
             return positionAfter;
         }
 
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
+        public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count)
         {

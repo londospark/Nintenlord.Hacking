@@ -4,7 +4,7 @@ namespace Nintenlord.Hacking.Core
 {
     public static class CRC32
     {
-        static uint[] crc32Table = new uint[256]
+        private static readonly uint[] crc32Table = new uint[256]
         {
             0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
             0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -51,10 +51,7 @@ namespace Nintenlord.Hacking.Core
             0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
         };
 
-        public static void crc32_adjust(ref uint crc32, byte input)
-        {
-            crc32 = crc32 >> 8 & 0x00ffffff ^ crc32Table[(crc32 ^ input) & 0xff];
-        }
+        public static void crc32_adjust(ref uint crc32, byte input) => crc32 = crc32 >> 8 & 0x00ffffff ^ crc32Table[(crc32 ^ input) & 0xff];
 
         public static void crc32_adjust(ref uint crc32, byte[] input)
         {
@@ -64,10 +61,7 @@ namespace Nintenlord.Hacking.Core
             }
         }
 
-        public static uint CalculateCRC32(byte[] data)
-        {
-            return CalculateCRC32(data, 0, data.Length);
-        }
+        public static uint CalculateCRC32(byte[] data) => CalculateCRC32(data, 0, data.Length);
 
         public static uint CalculateCRC32(byte[] data, int index, int length)
         {

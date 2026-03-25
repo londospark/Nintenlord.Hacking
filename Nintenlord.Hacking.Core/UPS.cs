@@ -8,18 +8,15 @@ namespace Nintenlord.Hacking.Core
 {
     public unsafe class UPSfile : ICloneable
     {
-        bool validPatch;
-        public bool ValidPatch
-        {
-            get { return validPatch; }
-        }
-        uint originalFileCRC32;
-        uint newFileCRC32;
-        uint patchCRC32;
-        ulong oldFileSize;
-        ulong newFileSize;
-        ulong[] changedOffsets;
-        byte[][] XORbytes;
+        private readonly bool validPatch;
+        public bool ValidPatch => validPatch;
+        private uint originalFileCRC32;
+        private uint newFileCRC32;
+        private uint patchCRC32;
+        private readonly ulong oldFileSize;
+        private readonly ulong newFileSize;
+        private readonly ulong[] changedOffsets;
+        private readonly byte[][] XORbytes;
 
         /// <summary>
         /// Creates a new UPS patch from UPS file
@@ -44,7 +41,7 @@ namespace Nintenlord.Hacking.Core
             }
             catch (Exception e)
             {
-                throw e;
+                throw;
             }
 
             fixed (byte* UPSptr = &UPSfile[0])
@@ -146,7 +143,7 @@ namespace Nintenlord.Hacking.Core
             patchCRC32 = CalculatePatchCRC32();
         }
 
-        static byte[] Encrypt(ulong offset)
+        private static byte[] Encrypt(ulong offset)
         {
             var bytes = new List<byte>(8);
 
@@ -163,7 +160,7 @@ namespace Nintenlord.Hacking.Core
             return bytes.ToArray();
         }
 
-        static ulong Decrypt(byte** pointer)
+        private static ulong Decrypt(byte** pointer)
         {
             ulong value = 0;
             var shift = 1;
@@ -179,10 +176,7 @@ namespace Nintenlord.Hacking.Core
             return value;
         }
 
-        private uint CalculatePatchCRC32()
-        {
-            return CRC32.CalculateCRC32(ToBinary());
-        }
+        private uint CalculatePatchCRC32() => CRC32.CalculateCRC32(ToBinary());
 
         public bool ValidToApply(byte[] file)
         {
@@ -311,10 +305,8 @@ namespace Nintenlord.Hacking.Core
         /// Creates a deeb copy of the object
         /// </summary>
         /// <returns>A deeb copy of the object</returns>
-        public object Clone()
-        {
-            return new UPSfile(changedOffsets, XORbytes, originalFileCRC32, newFileCRC32, oldFileSize, newFileSize);
-        }
+        public object Clone() => new UPSfile(changedOffsets, XORbytes, originalFileCRC32, newFileCRC32, oldFileSize, newFileSize);
+
         #endregion
     }
 

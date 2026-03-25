@@ -58,24 +58,12 @@ namespace Nintenlord.Hacking.Core
         public abstract int DecompressedDataLenght(byte[] data);
         public abstract int DecompressedDataLenght(byte[] data, int offset);
 
-        public bool SupportsOperation(CompressionOperation operation)
-        {
-            return (supportedModes & operation) == operation;
-        }
+        public bool SupportsOperation(CompressionOperation operation) => (supportedModes & operation) == operation;
 
-        public override bool Equals(object obj)
-        {
-            return GetType() == obj.GetType();
-        }
+        public override bool Equals(object obj) => GetType() == obj.GetType();
 
-        public override int GetHashCode()
-        {
-            return GetType().GetHashCode();
-        }
+        public override int GetHashCode() => GetType().GetHashCode();
 
-        public override string ToString()
-        {
-            return GetType().Name;
-        }
+        public override string ToString() => GetType().Name;
     }
 }

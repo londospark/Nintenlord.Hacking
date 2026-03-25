@@ -1,14 +1,25 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 
 namespace Nintenlord.ROMHacking
 {
-    interface IROM
+    internal interface IROM
     {
-        int Length { get; set; }
-        bool Opened { get; }
-        bool Edited { get; }
-        string ROMPath { get; }
+        int Length
+        {
+            get; set;
+        }
+        bool Opened
+        {
+            get;
+        }
+        bool Edited
+        {
+            get;
+        }
+        string ROMPath
+        {
+            get;
+        }
 
         byte[] GetData(int offset, int length);
 

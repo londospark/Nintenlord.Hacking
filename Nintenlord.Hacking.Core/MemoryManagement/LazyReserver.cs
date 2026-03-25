@@ -5,13 +5,13 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
     /// <summary>
     /// Reserves data only when needed
     /// </summary>
-    struct LazyReserver
+    internal struct LazyReserver
     {
-        int offset;
-        int size;
-        ManagedPointer dataPointer;
-        IROM rom;
-        IMemoryManager man;
+        private readonly int offset;
+        private readonly int size;
+        private ManagedPointer dataPointer;
+        private readonly IROM rom;
+        private readonly IMemoryManager man;
 
 
         public int Offset
@@ -28,13 +28,8 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
                 }
             }
         }
-        public bool HasReservedData
-        {
-            get
-            {
-                return dataPointer == null || dataPointer.IsNull;
-            }
-        }
+        public bool HasReservedData => dataPointer == null || dataPointer.IsNull;
+
         public ManagedPointer Pointer
         {
             get
@@ -71,17 +66,10 @@ namespace Nintenlord.Hacking.Core.MemoryManagement
                 return rom.ReadData(dataPointer);
             }
         }
-        public void WriteData(byte[] data)
-        {
-            WriteData(data, 0, data.Length);
-        }
-        public void WriteData(byte[] data, int index)
-        {
-            WriteData(data, index, data.Length - index);
-        }
-        public void WriteData(byte[] data, int index, int length)
-        {
-            rom.WriteData(Pointer, data, index, length);
-        }
+        public void WriteData(byte[] data) => WriteData(data, 0, data.Length);
+
+        public void WriteData(byte[] data, int index) => WriteData(data, index, data.Length - index);
+
+        public void WriteData(byte[] data, int index, int length) => rom.WriteData(Pointer, data, index, length);
     }
 }

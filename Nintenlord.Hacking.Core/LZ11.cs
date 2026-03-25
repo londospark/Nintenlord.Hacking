@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace DSDecmp.Formats.Nitro
@@ -56,13 +56,13 @@ namespace DSDecmp.Formats.Nitro
                 throw new InvalidDataException("The provided stream is not a valid LZ-0x11 "
                             + "compressed stream (invalid type 0x" + type.ToString("X") + ")");
             var sizeBytes = new byte[4];
-            instream.Read(sizeBytes, 0, 3);
+            instream.ReadExactly(sizeBytes, 0, 3);
             var decompressedSize = BitConverter.ToInt32(sizeBytes, 0);
             readBytes += 4;
             if (decompressedSize == 0)
             {
                 sizeBytes = new byte[4];
-                instream.Read(sizeBytes, 0, 4);
+                instream.ReadExactly(sizeBytes, 0, 4);
                 decompressedSize = BitConverter.ToInt32(sizeBytes, 0);
                 readBytes += 4;
             }
@@ -82,7 +82,8 @@ namespace DSDecmp.Formats.Nitro
                 // last flag bit, get a new flags byte.
                 if (mask == 1)
                 {
-                    flags = instream.ReadByte(); readBytes++;
+                    flags = instream.ReadByte();
+                    readBytes++;
                     if (flags < 0)
                         throw new IOException();
                     mask = 0x80;
@@ -100,7 +101,8 @@ namespace DSDecmp.Formats.Nitro
                     #region Get length and displacement('disp') values from next 2, 3 or 4 bytes
 
                     // read the first byte first, which also signals the size of the compressed block
-                    var byte1 = instream.ReadByte(); readBytes++;
+                    var byte1 = instream.ReadByte();
+                    readBytes++;
                     if (byte1 < 0)
                         throw new IOException();
 
@@ -116,8 +118,10 @@ namespace DSDecmp.Formats.Nitro
                         // DISP = DEF + 1
 
                         // we need two more bytes available
-                        var byte2 = instream.ReadByte(); readBytes++;
-                        var byte3 = instream.ReadByte(); readBytes++;
+                        var byte2 = instream.ReadByte();
+                        readBytes++;
+                        var byte3 = instream.ReadByte();
+                        readBytes++;
                         if (byte3 < 0)
                             throw new IOException();
 
@@ -136,9 +140,12 @@ namespace DSDecmp.Formats.Nitro
                         // DISP = FGH + 1
 
                         // we need three more bytes available
-                        var byte2 = instream.ReadByte(); readBytes++;
-                        var byte3 = instream.ReadByte(); readBytes++;
-                        var byte4 = instream.ReadByte(); readBytes++;
+                        var byte2 = instream.ReadByte();
+                        readBytes++;
+                        var byte3 = instream.ReadByte();
+                        readBytes++;
+                        var byte4 = instream.ReadByte();
+                        readBytes++;
                         if (byte4 < 0)
                             throw new IOException();
 
@@ -157,7 +164,8 @@ namespace DSDecmp.Formats.Nitro
                         // DISP = BCD + 1
 
                         // we need only one more byte available
-                        var byte2 = instream.ReadByte(); readBytes++;
+                        var byte2 = instream.ReadByte();
+                        readBytes++;
                         if (byte2 < 0)
                             throw new IOException();
 
@@ -187,11 +195,13 @@ namespace DSDecmp.Formats.Nitro
                 }
                 else
                 {
-                    var next = instream.ReadByte(); readBytes++;
+                    var next = instream.ReadByte();
+                    readBytes++;
                     if (next < 0)
                         throw new IOException();
 
-                    outstream.WriteByte((byte)next); currentOutSize++;
+                    outstream.WriteByte((byte)next);
+                    currentOutSize++;
                     buffer[bufferOffset] = (byte)next;
                     bufferOffset = (bufferOffset + 1) % bufferLength;
                 }

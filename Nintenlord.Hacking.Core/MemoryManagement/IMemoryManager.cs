@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Nintenlord.Hacking.Core.MemoryManagement;
-using Nintenlord.MemoryManagement;
+﻿using Nintenlord.MemoryManagement;
 
 namespace Nintenlord.Hacking.Core.MemoryManagement
 {
