@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Nintenlord.Hacking.Core
 {
-    public unsafe class UPSfile : ICloneable
+    public class UPSfile : ICloneable
     {
         private readonly bool validPatch;
         public bool ValidPatch => validPatch;
@@ -22,7 +24,7 @@ namespace Nintenlord.Hacking.Core
         /// Creates a new UPS patch from UPS file
         /// </summary>
         /// <param name="filePath">A path to an existing, valid UPS path.</param>
-        public UPSfile(string filePath)
+        public unsafe UPSfile(string filePath)
         {
             var changedOffsetsList = new List<ulong>();
             var XORbytesList = new List<byte[]>();
@@ -160,7 +162,7 @@ namespace Nintenlord.Hacking.Core
             return bytes.ToArray();
         }
 
-        private static ulong Decrypt(byte** pointer)
+        private static unsafe ulong Decrypt(byte** pointer)
         {
             ulong value = 0;
             var shift = 1;
@@ -187,7 +189,147 @@ namespace Nintenlord.Hacking.Core
             return validPatch && (fitsAsOld || fitsAsNew);
         }
 
-        public byte[] Apply(byte[] file)
+        public async Task<bool> ValidToApplyAsync(string path, CancellationToken cancellationToken = default)
+        {
+            if (!File.Exists(path))
+                return false;
+
+            var fileSize = (ulong)new FileInfo(path).Length;
+
+            // Skip CRC if size already doesn't match either expected size.
+            if (fileSize != oldFileSize && fileSize != newFileSize)
+                return false;
+
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var fileCRC32 = await CRC32.CalculateCRC32Async(stream, cancellationToken).ConfigureAwait(false);
+
+            var fitsAsOld = fileSize == oldFileSize && fileCRC32 == originalFileCRC32;
+            var fitsAsNew = fileSize == newFileSize && fileCRC32 == newFileCRC32;
+
+            return validPatch && (fitsAsOld || fitsAsNew);
+        }
+
+        /// <summary>
+        /// Applies the patch by streaming input to output without loading the entire ROM into memory.
+        /// Writes to a temporary file beside <paramref name="outputPath"/> and atomically replaces it on success.
+        /// Reports progress as a percentage (0–100).
+        /// </summary>
+        public async Task ApplyAsync(
+            string inputPath,
+            string outputPath,
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            var tempPath = outputPath + ".patching.tmp";
+            try
+            {
+                await ApplyStreamAsync(inputPath, tempPath, progress, cancellationToken).ConfigureAwait(false);
+
+                if (File.Exists(outputPath))
+                    File.Delete(outputPath);
+                File.Move(tempPath, outputPath);
+            }
+            catch
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+                throw;
+            }
+        }
+
+        private async Task ApplyStreamAsync(
+            string inputPath,
+            string outputPath,
+            IProgress<double>? progress,
+            CancellationToken cancellationToken)
+        {
+            const int bufferSize = 81920;
+            var copyBuffer = new byte[bufferSize];
+            var totalBytes = (double)newFileSize;
+
+            using var input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                bufferSize, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            using var output = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                bufferSize, FileOptions.Asynchronous);
+
+            long position = 0;
+
+            for (var patchIndex = 0; patchIndex <= changedOffsets.Length; patchIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var nextPatchOffset = patchIndex < changedOffsets.Length
+                    ? (long)changedOffsets[patchIndex]
+                    : (long)newFileSize;
+
+                // Copy (or zero-pad) unchanged bytes from current position up to the next patch.
+                var toCopy = nextPatchOffset - position;
+                while (toCopy > 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var chunkSize = (int)Math.Min(toCopy, copyBuffer.Length);
+                    var bytesRead = 0;
+
+                    if (input.Position < input.Length)
+                    {
+                        var available = (int)Math.Min(chunkSize, input.Length - input.Position);
+                        bytesRead = await ReadExactAsync(input, copyBuffer, 0, available, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    // Zero-pad if input is shorter than the new file size.
+                    if (bytesRead < chunkSize)
+                        Array.Clear(copyBuffer, bytesRead, chunkSize - bytesRead);
+
+                    await output.WriteAsync(copyBuffer, 0, chunkSize, cancellationToken).ConfigureAwait(false);
+                    position += chunkSize;
+                    toCopy -= chunkSize;
+
+                    progress?.Report(position / totalBytes * 100.0);
+                }
+
+                if (patchIndex >= changedOffsets.Length)
+                    break;
+
+                // Apply the XOR patch run at this offset.
+                var xorBytes = XORbytes[patchIndex];
+                var patchBuffer = new byte[xorBytes.Length];
+
+                if (input.Position < input.Length)
+                {
+                    var available = (int)Math.Min(xorBytes.Length, input.Length - input.Position);
+                    await ReadExactAsync(input, patchBuffer, 0, available, cancellationToken).ConfigureAwait(false);
+                    // Bytes beyond EOF are already 0x00 — XOR with patch byte = patch byte, which is correct.
+                }
+
+                for (var i = 0; i < xorBytes.Length; i++)
+                    patchBuffer[i] ^= xorBytes[i];
+
+                await output.WriteAsync(patchBuffer, 0, patchBuffer.Length, cancellationToken).ConfigureAwait(false);
+                position += xorBytes.Length;
+
+                progress?.Report(position / totalBytes * 100.0);
+            }
+
+            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
+            progress?.Report(100.0);
+        }
+
+        private static async Task<int> ReadExactAsync(Stream stream, byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            var totalRead = 0;
+            while (totalRead < count)
+            {
+                var bytesRead = await stream.ReadAsync(buffer, offset + totalRead, count - totalRead, cancellationToken).ConfigureAwait(false);
+                if (bytesRead == 0)
+                    break;
+                totalRead += bytesRead;
+            }
+            return totalRead;
+        }
+
+        public unsafe byte[] Apply(byte[] file)
         {
             var lenght = (ulong)file.LongLength;
             if (lenght < newFileSize)

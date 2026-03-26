@@ -1,4 +1,6 @@
 ﻿using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Nintenlord.Hacking.Core
 {
@@ -79,6 +81,19 @@ namespace Nintenlord.Hacking.Core
             while (reader.BaseStream.Position < reader.BaseStream.Length)
             {
                 crc32_adjust(ref crc32, reader.ReadByte());
+            }
+            return ~crc32;
+        }
+
+        public static async Task<uint> CalculateCRC32Async(Stream stream, CancellationToken cancellationToken = default)
+        {
+            var crc32 = 0xFFFFFFFFu;
+            var buffer = new byte[81920];
+            int bytesRead;
+            while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                for (var i = 0; i < bytesRead; i++)
+                    crc32_adjust(ref crc32, buffer[i]);
             }
             return ~crc32;
         }
