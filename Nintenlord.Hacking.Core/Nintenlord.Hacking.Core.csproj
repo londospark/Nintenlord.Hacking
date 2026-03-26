@@ -20,4 +20,8 @@
     <ProjectReference Include="..\Nintenlord\Nintenlord\Nintenlord.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="System.IO.Hashing" Version="10.0.5" />
+  </ItemGroup>
+
 </Project>

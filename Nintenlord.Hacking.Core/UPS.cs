@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -303,8 +304,7 @@ namespace Nintenlord.Hacking.Core
                     // Bytes beyond EOF are already 0x00 — XOR with patch byte = patch byte, which is correct.
                 }
 
-                for (var i = 0; i < xorBytes.Length; i++)
-                    patchBuffer[i] ^= xorBytes[i];
+                XorInto(patchBuffer.AsSpan(), xorBytes);
 
                 await output.WriteAsync(patchBuffer, 0, patchBuffer.Length, cancellationToken).ConfigureAwait(false);
                 position += xorBytes.Length;
@@ -329,6 +329,25 @@ namespace Nintenlord.Hacking.Core
             return totalRead;
         }
 
+        /// <summary>
+        /// XORs each byte of <paramref name="target"/> with the corresponding byte of <paramref name="source"/>
+        /// using portable SIMD (Vector&lt;byte&gt;) when hardware acceleration is available.
+        /// </summary>
+        private static void XorInto(Span<byte> target, ReadOnlySpan<byte> source)
+        {
+            var i = 0;
+            if (Vector.IsHardwareAccelerated)
+            {
+                var vecTarget = MemoryMarshal.Cast<byte, Vector<byte>>(target);
+                var vecSource = MemoryMarshal.Cast<byte, Vector<byte>>(source);
+                for (var v = 0; v < vecTarget.Length; v++)
+                    vecTarget[v] ^= vecSource[v];
+                i = vecTarget.Length * Vector<byte>.Count;
+            }
+            for (; i < target.Length; i++)
+                target[i] ^= source[i];
+        }
+
         public unsafe byte[] Apply(byte[] file)
         {
             var lenght = (ulong)file.LongLength;
@@ -340,11 +359,11 @@ namespace Nintenlord.Hacking.Core
             fixed (byte* resultPtr = &result[0])
             {
                 Marshal.Copy(file, 0, new IntPtr(resultPtr), Math.Min(file.Length, result.Length));
-
-                for (var i = 0; i < changedOffsets.LongLength; i++)
-                    for (ulong u = 0; u < (ulong)XORbytes[i].LongLength; u++)
-                        resultPtr[changedOffsets[i] + u] ^= XORbytes[i][u];
             }
+
+            for (var i = 0; i < changedOffsets.LongLength; i++)
+                XorInto(result.AsSpan((int)changedOffsets[i], XORbytes[i].Length), XORbytes[i]);
+
             return result;
         }
 

@@ -1,4 +1,6 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
+using System.IO.Hashing;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -6,6 +8,7 @@ namespace Nintenlord.Hacking.Core
 {
     public static class CRC32
     {
+        // Table kept for incremental crc32_adjust calls (used by external callers and tests).
         private static readonly uint[] crc32Table = new uint[256]
         {
             0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
@@ -53,49 +56,41 @@ namespace Nintenlord.Hacking.Core
             0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
         };
 
+        /// <summary>Incrementally updates a running CRC-32 state with a single byte.</summary>
         public static void crc32_adjust(ref uint crc32, byte input) => crc32 = crc32 >> 8 & 0x00ffffff ^ crc32Table[(crc32 ^ input) & 0xff];
 
+        /// <summary>Incrementally updates a running CRC-32 state with an array of bytes.</summary>
         public static void crc32_adjust(ref uint crc32, byte[] input)
         {
             foreach (var item in input)
-            {
                 crc32_adjust(ref crc32, item);
-            }
         }
 
-        public static uint CalculateCRC32(byte[] data) => CalculateCRC32(data, 0, data.Length);
+        // ---- Bulk/streaming overloads delegate to System.IO.Hashing.Crc32 for hardware acceleration ----
 
-        public static uint CalculateCRC32(byte[] data, int index, int length)
-        {
-            var crc32 = 0xFFFFFFFF;
-            for (var i = index; i < index + length; i++)
-            {
-                crc32_adjust(ref crc32, data[i]);
-            }
-            return ~crc32;
-        }
+        public static uint CalculateCRC32(byte[] data) => Crc32.HashToUInt32(data);
+
+        public static uint CalculateCRC32(byte[] data, int index, int length) =>
+            Crc32.HashToUInt32(data.AsSpan(index, length));
 
         public static uint CalculateCRC32(BinaryReader reader)
         {
-            var crc32 = 0xFFFFFFFF;
-            while (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                crc32_adjust(ref crc32, reader.ReadByte());
-            }
-            return ~crc32;
+            var hash = new Crc32();
+            var buffer = new byte[81920];
+            int bytesRead;
+            while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
+                hash.Append(buffer.AsSpan(0, bytesRead));
+            return hash.GetCurrentHashAsUInt32();
         }
 
         public static async Task<uint> CalculateCRC32Async(Stream stream, CancellationToken cancellationToken = default)
         {
-            var crc32 = 0xFFFFFFFFu;
+            var hash = new Crc32();
             var buffer = new byte[81920];
             int bytesRead;
             while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
-            {
-                for (var i = 0; i < bytesRead; i++)
-                    crc32_adjust(ref crc32, buffer[i]);
-            }
-            return ~crc32;
+                hash.Append(buffer.AsSpan(0, bytesRead));
+            return hash.GetCurrentHashAsUInt32();
         }
     }
 }
