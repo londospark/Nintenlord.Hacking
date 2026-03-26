@@ -22,32 +22,33 @@ namespace Nintenlord.Hacking.Core
         private readonly byte[][] XORbytes = Array.Empty<byte[]>();
 
         /// <summary>
-        /// Creates a new UPS patch from UPS file
+        /// Creates a new UPS patch from a UPS file path.
         /// </summary>
-        /// <param name="filePath">A path to an existing, valid UPS path.</param>
-        public unsafe UPSfile(string filePath)
+        public UPSfile(string filePath)
+            : this(File.Exists(filePath) ? ReadPatchFileBytes(filePath) : Array.Empty<byte>())
+        {
+        }
+
+        private static byte[] ReadPatchFileBytes(string filePath)
+        {
+            using var br = new BinaryReader(File.OpenRead(filePath));
+            return br.ReadBytes((int)br.BaseStream.Length);
+        }
+
+        /// <summary>
+        /// Creates a new UPS patch from raw patch bytes (e.g. from a stream).
+        /// </summary>
+        public unsafe UPSfile(byte[] patchData)
         {
             var changedOffsetsList = new List<ulong>();
             var XORbytesList = new List<byte[]>();
 
             validPatch = false;
 
-            if (!File.Exists(filePath))
+            if (patchData.Length < 16)
                 return;
 
-            byte[] UPSfile;
-            try
-            {
-                var br = new BinaryReader(File.OpenRead(filePath));
-                UPSfile = br.ReadBytes((int)br.BaseStream.Length);
-                br.Close();
-            }
-            catch (Exception e)
-            {
-                throw;
-            }
-
-            fixed (byte* UPSptr = &UPSfile[0])
+            fixed (byte* UPSptr = &patchData[0])
             {
                 //header
                 var currentPtr = UPSptr;
@@ -60,7 +61,7 @@ namespace Nintenlord.Hacking.Core
 
                 //body
                 ulong filePosition = 0;
-                while (currentPtr - UPSptr + 1 < UPSfile.Length - 12)
+                while (currentPtr - UPSptr + 1 < patchData.Length - 12)
                 {
                     filePosition += Decrypt(&currentPtr);
                     changedOffsetsList.Add(filePosition);
@@ -80,7 +81,6 @@ namespace Nintenlord.Hacking.Core
                 newFileCRC32 = *(uint*)(currentPtr + 4);
                 patchCRC32 = *(uint*)(currentPtr + 8);
             }
-
 
             changedOffsets = changedOffsetsList.ToArray();
             XORbytes = XORbytesList.ToArray();
