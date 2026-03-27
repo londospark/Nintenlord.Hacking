@@ -530,9 +530,9 @@ namespace Nintenlord.Hacking.Core
 
         public bool ChangesOffset(ulong offset)
         {
-            for (var i = 0; changedOffsets[i] <= offset && i < changedOffsets.Length; i++)
+            for (var i = 0; i < changedOffsets.Length && changedOffsets[i] <= offset; i++)
             {
-                if (changedOffsets[i] <= offset && offset < changedOffsets[i] + (ulong)GetXorRunLength(i))
+                if (offset < changedOffsets[i] + (ulong)GetXorRunLength(i))
                     return true;
             }
             return false;
@@ -540,12 +540,11 @@ namespace Nintenlord.Hacking.Core
 
         public bool ChangeOffsets(ulong offset, int length)
         {
-            for (var i = 0; changedOffsets[i] <= offset + (ulong)length && i < changedOffsets.Length; i++)
+            // Standard interval overlap: run [runStart, runStart+runLen) ∩ range [offset, offset+length) ≠ ∅
+            // iff runStart < offset+length AND runStart+runLen > offset
+            for (var i = 0; i < changedOffsets.Length && changedOffsets[i] < offset + (ulong)length; i++)
             {
-                var runLen = (ulong)GetXorRunLength(i);
-                if (changedOffsets[i] <= offset && changedOffsets[i] + runLen > offset)
-                    return true;
-                if (changedOffsets[i] <= offset + (ulong)length && offset + (ulong)length < changedOffsets[i] + runLen)
+                if (changedOffsets[i] + (ulong)GetXorRunLength(i) > offset)
                     return true;
             }
             return false;
