@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Nintenlord.Hacking.Core
 {
-    public class UPSfile : ICloneable
+    public class UPSfile : ICloneable, IDisposable
     {
         private readonly bool validPatch;
         public bool ValidPatch => validPatch;
@@ -19,76 +20,163 @@ namespace Nintenlord.Hacking.Core
         private readonly ulong oldFileSize;
         private readonly ulong newFileSize;
         private readonly ulong[] changedOffsets = Array.Empty<ulong>();
+
+        // Indices into the patch data for each XOR run (set on all load paths).
+        private readonly int[] _patchRunOffsets = Array.Empty<int>();
+        private readonly int[] _patchRunLengths = Array.Empty<int>();
+
+        // Memory-mapped path (UPSfile(string)): zero-copy, OS pages on demand.
+        // Works on Windows, macOS, Linux. Falls back to byte[] on iOS/Android
+        // where file-picker returns a URI without a local path.
+        private readonly MemoryMappedFile? _mappedFile;
+        private readonly MemoryMappedViewAccessor? _mappedViewAccessor;
+        private nint _mappedViewPointer;   // byte* as nint; 0 when not memory-mapped
+        private readonly long _mappedFileLength;
+
+        // Byte-array path (UPSfile(byte[])): used when only a stream is available
+        // (e.g. IStorageFile on mobile). Stored once; runs slice into it, no copy.
+        private readonly byte[]? _patchData;
+
+        // Create path (UPSfile(byte[] original, byte[] newFile)): XOR bytes built
+        // in memory. _patchData and _mappedViewPointer remain null/0.
         private readonly byte[][] XORbytes = Array.Empty<byte[]>();
 
+        /// <summary>Returns a read-only view of the XOR bytes for patch run <paramref name="i"/>.</summary>
+        private unsafe ReadOnlySpan<byte> GetXorRun(int i) =>
+            _mappedViewPointer != 0
+                ? new ReadOnlySpan<byte>((byte*)_mappedViewPointer + _patchRunOffsets[i], _patchRunLengths[i])
+                : _patchData != null
+                    ? _patchData.AsSpan(_patchRunOffsets[i], _patchRunLengths[i])
+                    : XORbytes[i].AsSpan();
+
+        private int GetXorRunLength(int i) =>
+            _mappedViewPointer != 0 || _patchData != null
+                ? _patchRunLengths[i]
+                : XORbytes[i].Length;
+
         /// <summary>
-        /// Creates a new UPS patch from a UPS file path.
+        /// Loads a UPS patch from a file path using a memory-mapped view.
+        /// The OS pages in only the regions actually accessed; no full copy is made.
+        /// Dispose this instance when patching is complete to release the mapping.
         /// </summary>
-        public UPSfile(string filePath)
-            : this(File.Exists(filePath) ? ReadPatchFileBytes(filePath) : Array.Empty<byte>())
+        public unsafe UPSfile(string filePath)
         {
-        }
+            validPatch = false;
+            if (!File.Exists(filePath)) return;
 
-        private static byte[] ReadPatchFileBytes(string filePath)
-        {
-            using var br = new BinaryReader(File.OpenRead(filePath));
-            return br.ReadBytes((int)br.BaseStream.Length);
+            _mappedFileLength = new FileInfo(filePath).Length;
+            if (_mappedFileLength < 16) return;
+
+            _mappedFile = MemoryMappedFile.CreateFromFile(
+                filePath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+            _mappedViewAccessor = _mappedFile.CreateViewAccessor(
+                0, 0, MemoryMappedFileAccess.Read);
+
+            byte* ptr = null;
+            _mappedViewAccessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+            // PointerOffset accounts for page-alignment padding before byte 0 of the file.
+            _mappedViewPointer = (nint)(ptr + _mappedViewAccessor.PointerOffset);
+
+            if (!TryParsePatch((byte*)_mappedViewPointer, (int)_mappedFileLength,
+                    out var offsets, out var runOffsets, out var runLengths,
+                    out oldFileSize, out newFileSize,
+                    out originalFileCRC32, out newFileCRC32, out patchCRC32))
+                return;
+
+            changedOffsets = offsets;
+            _patchRunOffsets = runOffsets;
+            _patchRunLengths = runLengths;
+
+            if (patchCRC32 != CalculatePatchCRC32()) return;
+            validPatch = true;
         }
 
         /// <summary>
-        /// Creates a new UPS patch from raw patch bytes (e.g. from a stream).
+        /// Loads a UPS patch from raw bytes already read into memory (e.g. from
+        /// IStorageFile.OpenReadAsync() on mobile). The array is stored once;
+        /// XOR run data is never duplicated — only offsets/lengths are recorded.
         /// </summary>
         public unsafe UPSfile(byte[] patchData)
         {
-            var changedOffsetsList = new List<ulong>();
-            var XORbytesList = new List<byte[]>();
-
             validPatch = false;
+            if (patchData.Length < 16) return;
 
-            if (patchData.Length < 16)
-                return;
-
-            fixed (byte* UPSptr = &patchData[0])
+            fixed (byte* ptr = &patchData[0])
             {
-                //header
-                var currentPtr = UPSptr;
-                var header = new string((sbyte*)currentPtr, 0, 4, Encoding.ASCII);
-                if (header != "UPS1")
+                if (!TryParsePatch(ptr, patchData.Length,
+                        out var offsets, out var runOffsets, out var runLengths,
+                        out oldFileSize, out newFileSize,
+                        out originalFileCRC32, out newFileCRC32, out patchCRC32))
                     return;
-                currentPtr += 4;
-                oldFileSize = Decrypt(&currentPtr);
-                newFileSize = Decrypt(&currentPtr);
 
-                //body
-                ulong filePosition = 0;
-                while (currentPtr - UPSptr + 1 < patchData.Length - 12)
-                {
-                    filePosition += Decrypt(&currentPtr);
-                    changedOffsetsList.Add(filePosition);
-                    var newXORdata = new List<byte>();
-
-                    while (*currentPtr != 0)
-                    {
-                        newXORdata.Add(*currentPtr++);
-                    }
-                    XORbytesList.Add(newXORdata.ToArray());
-                    filePosition += (ulong)newXORdata.Count + 1;
-                    currentPtr++;
-                }
-
-                //end
-                originalFileCRC32 = *(uint*)currentPtr;
-                newFileCRC32 = *(uint*)(currentPtr + 4);
-                patchCRC32 = *(uint*)(currentPtr + 8);
+                changedOffsets = offsets;
+                _patchRunOffsets = runOffsets;
+                _patchRunLengths = runLengths;
             }
 
-            changedOffsets = changedOffsetsList.ToArray();
-            XORbytes = XORbytesList.ToArray();
-
-            if (patchCRC32 != CalculatePatchCRC32())
-                return;
-
+            _patchData = patchData;
+            if (patchCRC32 != CalculatePatchCRC32()) return;
             validPatch = true;
+        }
+
+        /// <summary>
+        /// Parses the UPS binary format from a raw pointer. Used by both load
+        /// constructors so the format-reading logic is not duplicated.
+        /// </summary>
+        private static unsafe bool TryParsePatch(
+            byte* dataPtr, int dataLength,
+            out ulong[] changedOffsets,
+            out int[] patchRunOffsets,
+            out int[] patchRunLengths,
+            out ulong oldFileSize,
+            out ulong newFileSize,
+            out uint originalFileCRC32,
+            out uint newFileCRC32,
+            out uint patchCRC32)
+        {
+            changedOffsets = Array.Empty<ulong>();
+            patchRunOffsets = Array.Empty<int>();
+            patchRunLengths = Array.Empty<int>();
+            oldFileSize = newFileSize = 0;
+            originalFileCRC32 = newFileCRC32 = patchCRC32 = 0;
+
+            if (dataLength < 16) return false;
+
+            var currentPtr = dataPtr;
+            var header = new string((sbyte*)currentPtr, 0, 4, Encoding.ASCII);
+            if (header != "UPS1") return false;
+            currentPtr += 4;
+            oldFileSize = Decrypt(&currentPtr);
+            newFileSize = Decrypt(&currentPtr);
+
+            var offsetsList = new List<ulong>();
+            var runOffsetsList = new List<int>();
+            var runLengthsList = new List<int>();
+
+            ulong filePosition = 0;
+            while (currentPtr - dataPtr + 1 < dataLength - 12)
+            {
+                filePosition += Decrypt(&currentPtr);
+                offsetsList.Add(filePosition);
+
+                var runStart = (int)(currentPtr - dataPtr);
+                var runLen = 0;
+                while (*currentPtr != 0) { currentPtr++; runLen++; }
+                runOffsetsList.Add(runStart);
+                runLengthsList.Add(runLen);
+
+                filePosition += (ulong)runLen + 1;
+                currentPtr++; // skip null terminator
+            }
+
+            originalFileCRC32 = *(uint*)currentPtr;
+            newFileCRC32 = *(uint*)(currentPtr + 4);
+            patchCRC32 = *(uint*)(currentPtr + 8);
+
+            changedOffsets = offsetsList.ToArray();
+            patchRunOffsets = runOffsetsList.ToArray();
+            patchRunLengths = runLengthsList.ToArray();
+            return true;
         }
 
         public UPSfile(byte[] originalFile, byte[] newFile)
@@ -179,7 +267,15 @@ namespace Nintenlord.Hacking.Core
             return value;
         }
 
-        private uint CalculatePatchCRC32() => CRC32.CalculateCRC32(ToBinary());
+        private unsafe uint CalculatePatchCRC32()
+        {
+            if (_mappedViewPointer != 0)
+                return CRC32.CalculateCRC32(
+                    new ReadOnlySpan<byte>((byte*)_mappedViewPointer, (int)(_mappedFileLength - 4)));
+            if (_patchData != null)
+                return CRC32.CalculateCRC32(_patchData, 0, _patchData.Length - 4);
+            return CRC32.CalculateCRC32(ToBinary());
+        }
 
         public bool ValidToApply(byte[] file)
         {
@@ -378,7 +474,7 @@ namespace Nintenlord.Hacking.Core
             }
 
             for (var i = 0; i < changedOffsets.LongLength; i++)
-                XorInto(result.AsSpan((int)changedOffsets[i], XORbytes[i].Length), XORbytes[i]);
+                XorInto(result.AsSpan((int)changedOffsets[i], GetXorRunLength(i)), GetXorRun(i));
 
             return result;
         }
@@ -408,10 +504,10 @@ namespace Nintenlord.Hacking.Core
             {
                 var relativeOffset = changedOffsets[i];
                 if (i != 0)
-                    relativeOffset -= changedOffsets[i - 1] + (ulong)XORbytes[i - 1].Length + 1;
+                    relativeOffset -= changedOffsets[i - 1] + (ulong)GetXorRunLength(i - 1) + 1;
 
                 file.AddRange(Encrypt(relativeOffset));
-                file.AddRange(XORbytes[i]);
+                foreach (var b in GetXorRun(i)) file.Add(b);
                 file.Add(0);
             }
 
@@ -436,7 +532,7 @@ namespace Nintenlord.Hacking.Core
             for (var i = 0; i < changedOffsets.Length; i++)
             {
                 result[i, 0] = (int)changedOffsets[i];
-                result[i, 1] = XORbytes[i].Length;
+                result[i, 1] = GetXorRunLength(i);
             }
             return result;
         }
@@ -445,7 +541,7 @@ namespace Nintenlord.Hacking.Core
         {
             for (var i = 0; changedOffsets[i] <= offset && i < changedOffsets.Length; i++)
             {
-                if (changedOffsets[i] <= offset && offset < changedOffsets[i] + (ulong)XORbytes[i].Length)
+                if (changedOffsets[i] <= offset && offset < changedOffsets[i] + (ulong)GetXorRunLength(i))
                     return true;
             }
             return false;
@@ -455,9 +551,10 @@ namespace Nintenlord.Hacking.Core
         {
             for (var i = 0; changedOffsets[i] <= offset + (ulong)length && i < changedOffsets.Length; i++)
             {
-                if (changedOffsets[i] <= offset && changedOffsets[i] + (ulong)XORbytes[i].LongLength > offset)
+                var runLen = (ulong)GetXorRunLength(i);
+                if (changedOffsets[i] <= offset && changedOffsets[i] + runLen > offset)
                     return true;
-                else if (changedOffsets[i] <= offset + (ulong)length && offset + (ulong)length < changedOffsets[i] + (ulong)XORbytes[i].Length)
+                if (changedOffsets[i] <= offset + (ulong)length && offset + (ulong)length < changedOffsets[i] + runLen)
                     return true;
             }
             return false;
@@ -479,11 +576,22 @@ namespace Nintenlord.Hacking.Core
 
         #region ICloneable Members
         /// <summary>
-        /// Creates a deeb copy of the object
+        /// Creates a deep copy of the object
         /// </summary>
-        /// <returns>A deeb copy of the object</returns>
         public object Clone() => new UPSfile(changedOffsets, XORbytes, originalFileCRC32, newFileCRC32, oldFileSize, newFileSize);
+        #endregion
 
+        #region IDisposable Members
+        public void Dispose()
+        {
+            if (_mappedViewPointer != 0)
+            {
+                _mappedViewAccessor!.SafeMemoryMappedViewHandle.ReleasePointer();
+                _mappedViewPointer = 0;
+            }
+            _mappedViewAccessor?.Dispose();
+            _mappedFile?.Dispose();
+        }
         #endregion
     }
 

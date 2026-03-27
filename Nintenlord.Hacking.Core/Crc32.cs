@@ -70,6 +70,8 @@ namespace Nintenlord.Hacking.Core
 
         public static uint CalculateCRC32(byte[] data) => Crc32.HashToUInt32(data);
 
+        public static uint CalculateCRC32(ReadOnlySpan<byte> data) => Crc32.HashToUInt32(data);
+
         public static uint CalculateCRC32(byte[] data, int index, int length) =>
             Crc32.HashToUInt32(data.AsSpan(index, length));
 
