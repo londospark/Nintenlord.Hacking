@@ -83,13 +83,28 @@ namespace Nintenlord.Hacking.Core
             return hash.GetCurrentHashAsUInt32();
         }
 
-        public static async Task<uint> CalculateCRC32Async(Stream stream, CancellationToken cancellationToken = default)
+        public static async Task<uint> CalculateCRC32Async(Stream stream, CancellationToken cancellationToken = default, IProgress<double>? progress = null)
         {
             var hash = new Crc32();
             var buffer = new byte[81920];
+            var totalBytes = stream.CanSeek ? (double)stream.Length : 0;
+            long processed = 0;
+            var lastReportedPct = -1;
             int bytesRead;
             while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+            {
                 hash.Append(buffer.AsSpan(0, bytesRead));
+                if (progress != null && totalBytes > 0)
+                {
+                    processed += bytesRead;
+                    var pct = (int)(processed / totalBytes * 100.0);
+                    if (pct != lastReportedPct)
+                    {
+                        progress.Report(pct);
+                        lastReportedPct = pct;
+                    }
+                }
+            }
             return hash.GetCurrentHashAsUInt32();
         }
     }

@@ -190,7 +190,7 @@ namespace Nintenlord.Hacking.Core
             return validPatch && (fitsAsOld || fitsAsNew);
         }
 
-        public async Task<bool> ValidToApplyAsync(string path, CancellationToken cancellationToken = default)
+        public async Task<bool> ValidToApplyAsync(string path, CancellationToken cancellationToken = default, IProgress<double>? progress = null)
         {
             if (!File.Exists(path))
                 return false;
@@ -203,7 +203,7 @@ namespace Nintenlord.Hacking.Core
 
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            var fileCRC32 = await CRC32.CalculateCRC32Async(stream, cancellationToken).ConfigureAwait(false);
+            var fileCRC32 = await CRC32.CalculateCRC32Async(stream, cancellationToken, progress).ConfigureAwait(false);
 
             var fitsAsOld = fileSize == oldFileSize && fileCRC32 == originalFileCRC32;
             var fitsAsNew = fileSize == newFileSize && fileCRC32 == newFileCRC32;
@@ -255,6 +255,7 @@ namespace Nintenlord.Hacking.Core
                 bufferSize, FileOptions.Asynchronous);
 
             long position = 0;
+            var lastReportedPct = -1;
 
             for (var patchIndex = 0; patchIndex <= changedOffsets.Length; patchIndex++)
             {
@@ -287,7 +288,7 @@ namespace Nintenlord.Hacking.Core
                     position += chunkSize;
                     toCopy -= chunkSize;
 
-                    progress?.Report(position / totalBytes * 100.0);
+                    ReportThrottled(progress, position, totalBytes, ref lastReportedPct);
                 }
 
                 if (patchIndex >= changedOffsets.Length)
@@ -309,11 +310,26 @@ namespace Nintenlord.Hacking.Core
                 await output.WriteAsync(patchBuffer, 0, patchBuffer.Length, cancellationToken).ConfigureAwait(false);
                 position += xorBytes.Length;
 
-                progress?.Report(position / totalBytes * 100.0);
+                ReportThrottled(progress, position, totalBytes, ref lastReportedPct);
             }
 
             await output.FlushAsync(cancellationToken).ConfigureAwait(false);
             progress?.Report(100.0);
+        }
+
+        /// <summary>
+        /// Reports progress only when the integer percentage changes, capping UI callbacks at ~101
+        /// instead of firing every 80 KB (which would mean ~18,000 Dispatcher.Post calls for a 1.5 GB ISO).
+        /// </summary>
+        private static void ReportThrottled(IProgress<double>? progress, long position, double totalBytes, ref int lastReportedPct)
+        {
+            if (progress == null) return;
+            var pct = (int)(position / totalBytes * 100.0);
+            if (pct != lastReportedPct)
+            {
+                progress.Report(pct);
+                lastReportedPct = pct;
+            }
         }
 
         private static async Task<int> ReadExactAsync(Stream stream, byte[] buffer, int offset, int count, CancellationToken cancellationToken)
