@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using HardwareCrc32 = System.IO.Hashing.Crc32;
 
 namespace Nintenlord.Hacking.Core
 {
@@ -391,20 +392,21 @@ namespace Nintenlord.Hacking.Core
                     break;
 
                 // Apply the XOR patch run at this offset.
-                var xorBytes = XORbytes[patchIndex];
-                var patchBuffer = new byte[xorBytes.Length];
+                // Materialise the run to a byte array so it can cross the await boundaries below.
+                var xorRun = GetXorRun(patchIndex).ToArray();
+                var patchBuffer = new byte[xorRun.Length];
 
                 if (input.Position < input.Length)
                 {
-                    var available = (int)Math.Min(xorBytes.Length, input.Length - input.Position);
+                    var available = (int)Math.Min(xorRun.Length, input.Length - input.Position);
                     await ReadExactAsync(input, patchBuffer, 0, available, cancellationToken).ConfigureAwait(false);
                     // Bytes beyond EOF are already 0x00 — XOR with patch byte = patch byte, which is correct.
                 }
 
-                XorInto(patchBuffer.AsSpan(), xorBytes);
+                XorInto(patchBuffer.AsSpan(), xorRun);
 
                 await output.WriteAsync(patchBuffer, 0, patchBuffer.Length, cancellationToken).ConfigureAwait(false);
-                position += xorBytes.Length;
+                position += xorRun.Length;
 
                 ReportThrottled(progress, position, totalBytes, ref lastReportedPct);
             }
@@ -477,17 +479,6 @@ namespace Nintenlord.Hacking.Core
                 XorInto(result.AsSpan((int)changedOffsets[i], GetXorRunLength(i)), GetXorRun(i));
 
             return result;
-        }
-
-        public byte[]? Apply(string path)
-        {
-            if (!validPatch || !File.Exists(path))
-                return null;
-
-            var br = new BinaryReader(File.Open(path, FileMode.Open));
-            var file = br.ReadBytes((int)br.BaseStream.Length);
-            br.Close();
-            return Apply(file);
         }
 
         private byte[] ToBinary()
@@ -576,9 +567,165 @@ namespace Nintenlord.Hacking.Core
 
         #region ICloneable Members
         /// <summary>
-        /// Creates a deep copy of the object
+        /// Creates a deep copy of this patch. Works for all load paths (memory-mapped,
+        /// byte-array and in-memory create) by materialising XOR run data via GetXorRun.
         /// </summary>
-        public object Clone() => new UPSfile(changedOffsets, XORbytes, originalFileCRC32, newFileCRC32, oldFileSize, newFileSize);
+        public object Clone()
+        {
+            var xorData = new byte[changedOffsets.Length][];
+            for (var i = 0; i < xorData.Length; i++)
+                xorData[i] = GetXorRun(i).ToArray();
+            return new UPSfile(changedOffsets, xorData, originalFileCRC32, newFileCRC32, oldFileSize, newFileSize);
+        }
+        #endregion
+
+        #region Streaming create
+        /// <summary>
+        /// Creates a UPS patch file from two files on disk without loading either into RAM.
+        /// Memory-maps both input files, computes CRC32 and the XOR diff in a single pass,
+        /// and writes the patch incrementally to a temp file — atomically replacing
+        /// <paramref name="outputPath"/> on success.
+        /// </summary>
+        public static Task WriteAsync(
+            string originalPath,
+            string modifiedPath,
+            string outputPath,
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default) =>
+            Task.Run(() => WriteCore(originalPath, modifiedPath, outputPath, progress, cancellationToken),
+                cancellationToken);
+
+        private static unsafe void WriteCore(
+            string originalPath,
+            string modifiedPath,
+            string outputPath,
+            IProgress<double>? progress,
+            CancellationToken ct)
+        {
+            var originalSize = (ulong)new FileInfo(originalPath).Length;
+            var modifiedSize = (ulong)new FileInfo(modifiedPath).Length;
+            var maxSize = Math.Max(originalSize, modifiedSize);
+
+            var tempPath = outputPath + ".creating.tmp";
+            try
+            {
+                using var origMapped = MemoryMappedFile.CreateFromFile(
+                    originalPath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+                using var modiMapped = MemoryMappedFile.CreateFromFile(
+                    modifiedPath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
+                using var origAccess = origMapped.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+                using var modiAccess = modiMapped.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+                byte* origPtr = null, modiPtr = null;
+                try
+                {
+                    origAccess.SafeMemoryMappedViewHandle.AcquirePointer(ref origPtr);
+                    modiAccess.SafeMemoryMappedViewHandle.AcquirePointer(ref modiPtr);
+                    origPtr += origAccess.PointerOffset;
+                    modiPtr += modiAccess.PointerOffset;
+
+                    // CRC32 of both files — hardware-accelerated SIMD, very fast even for 2 GB.
+                    var origCrc = CRC32.CalculateCRC32(new ReadOnlySpan<byte>(origPtr, (int)originalSize));
+                    var modiCrc = CRC32.CalculateCRC32(new ReadOnlySpan<byte>(modiPtr, (int)modifiedSize));
+
+                    var patchHash = new HardwareCrc32();
+
+                    using var outStream = new FileStream(
+                        tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
+
+                    // ---- Header ----
+                    var header = stackalloc byte[] { (byte)'U', (byte)'P', (byte)'S', (byte)'1' };
+                    var headerSpan = new ReadOnlySpan<byte>(header, 4);
+                    outStream.Write(headerSpan);
+                    patchHash.Append(headerSpan);
+                    WriteVarUIntCore(outStream, patchHash, originalSize);
+                    WriteVarUIntCore(outStream, patchHash, modifiedSize);
+
+                    // ---- Diff scan ----
+                    ulong romCursor = 0;   // ROM cursor after previous run's null-terminator position
+                    ulong filePos = 0;
+                    var lastPct = -1;
+                    var totalBytes = (double)maxSize;
+                    var zero = stackalloc byte[1]; // null terminator written after each XOR run
+
+                    while (filePos < maxSize)
+                    {
+                        // Check for cancellation and report progress every 64 KB.
+                        if ((filePos & 0xFFFF) == 0)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            ReportThrottled(progress, (long)filePos, totalBytes, ref lastPct);
+                        }
+
+                        var x = filePos < originalSize ? origPtr[filePos] : (byte)0;
+                        var y = filePos < modifiedSize ? modiPtr[filePos] : (byte)0;
+
+                        if (x != y)
+                        {
+                            // Encode the relative offset from the romCursor to the start of this run.
+                            WriteVarUIntCore(outStream, patchHash, filePos - romCursor);
+
+                            // Collect and write the XOR run.
+                            var runXor = new List<byte>(128);
+                            while (filePos < maxSize)
+                            {
+                                x = filePos < originalSize ? origPtr[filePos] : (byte)0;
+                                y = filePos < modifiedSize ? modiPtr[filePos] : (byte)0;
+                                if (x == y) break;
+                                runXor.Add((byte)(x ^ y));
+                                filePos++;
+                            }
+                            var runBuf = runXor.ToArray();
+                            outStream.Write(runBuf);
+                            patchHash.Append(runBuf);
+
+                            // Null terminator: the first matching byte after the run.
+                            outStream.Write(new ReadOnlySpan<byte>(zero, 1));
+                            patchHash.Append(new ReadOnlySpan<byte>(zero, 1));
+
+                            filePos++;          // advance past the null terminator's ROM position
+                            romCursor = filePos;
+                        }
+                        else
+                        {
+                            filePos++;
+                        }
+                    }
+
+                    // ---- Footer ----
+                    var origCrcBytes = BitConverter.GetBytes(origCrc);
+                    var modiCrcBytes = BitConverter.GetBytes(modiCrc);
+                    outStream.Write(origCrcBytes);
+                    patchHash.Append(origCrcBytes);
+                    outStream.Write(modiCrcBytes);
+                    patchHash.Append(modiCrcBytes);
+                    outStream.Write(BitConverter.GetBytes(patchHash.GetCurrentHashAsUInt32()));
+
+                    outStream.Flush();
+                    progress?.Report(100.0);
+                }
+                finally
+                {
+                    if (origPtr != null) origAccess.SafeMemoryMappedViewHandle.ReleasePointer();
+                    if (modiPtr != null) modiAccess.SafeMemoryMappedViewHandle.ReleasePointer();
+                }
+
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+                File.Move(tempPath, outputPath);
+            }
+            catch
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+                throw;
+            }
+        }
+
+        private static void WriteVarUIntCore(Stream stream, HardwareCrc32 hash, ulong value)
+        {
+            var encoded = Encrypt(value);
+            stream.Write(encoded);
+            hash.Append(encoded);
+        }
         #endregion
 
         #region IDisposable Members
